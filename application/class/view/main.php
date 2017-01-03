@@ -11,7 +11,6 @@ class View
     }
 
     public function output() {
-        // '<p><a href="a.php?action=clicked">' . $this->model->string . "</a></p>";
         require_once($this->model->template);
     }
     
@@ -21,5 +20,12 @@ class View
     
     public function fetch_data() {
         return $this->model->acars_content;
+    }
+    
+    public function map_data() {
+        return $this->model->map_markers;
+    }
+    public function last_map_id() {
+        return $this->model->last_map_id;
     }
 }

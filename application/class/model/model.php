@@ -14,7 +14,11 @@ class Model
     public $location;
     public $refresh_frequency;
     public $use_img_cache;
-    
+    public $output_format;
+    public $map_markers;
+    public $last_map_id;
+    public $gmap_api;
+    public $gmaip_location;
     public function __construct(){
         $this->last_id = 0;
         $this->acars_content = '{}';
@@ -28,6 +32,9 @@ class Model
         $this->db_host = $db_host;
         $this->db_username = $db_username;
         $this->db_password = $db_password;
+        $this->output_format = $output_format;
+        $this->gmap_api = $google_maps_api;
+        $this->gmap_location = $google_maps_center;
     }
     
     public function template($tpl) {

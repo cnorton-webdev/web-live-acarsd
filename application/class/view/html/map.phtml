@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ACARSD Server Map View</title>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+        #map {
+            height: 100%;
+        }
+        
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        #map {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .position_list {
+            position: absolute;
+            z-index: 2;
+            right: 5%;
+            top: 0;
+            background: transparent;
+            width: 100px;
+            height: 50px;
+        }
+        .info_flight, .info_date {
+            font-size: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="content">
+        <!-- TODO: Show list of current position reprots 
+        <div class="position_list"><h1>Content</h1></div>
+        -->
+        <div id="map"></div>
+    </div>
+    <!-- jQuery -->
+    <script src="js/jquery.min.js"></script>
+    <!-- Google Maps -->
+    <script>
+        $('#map').css('width', $(document).width() + 'px');
+        $('#map').css('height', $(document).height() + 'px');
+        setInterval(check_last_id, 15000);
+        var map;
+        var markers = [];
+        var infowindow = [];
+        var last_id = 0;
+
+        function initMap() {
+            geocoder = new google.maps.Geocoder();
+            geocoder.geocode({
+                'address': '<?php echo $this->model->gmap_location; ?>'
+            }, function (results, status) {
+                if (status == google.maps.GeocoderStatus.OK) {
+                    var myOptions = {
+                        zoom: 8
+                        , center: results[0].geometry.location
+                        , mapTypeId: google.maps.MapTypeId.ROADMAP
+                    }
+                    map = new google.maps.Map(document.getElementById("map"), myOptions);
+                }
+            });
+        }
+
+        function setMapOnAll(map) {
+            for (var i = 0; i < markers.length; i++) {
+                markers[i].setMap(map);
+            }
+        }
+
+        function clearMarkers() {
+            setMapOnAll(null);
+        }
+
+        function add_markers(data) {
+            clearMarkers();
+            var mapObj = $.parseJSON(data);
+            for (var i = 0; i < mapObj.length; i++) {
+                var latLng = new google.maps.LatLng(mapObj[i].lat, mapObj[i].lng);
+                markers[i] = new google.maps.Marker({
+                    position: latLng
+                    , icon: 'images/icons/plane.png'
+                    , title: mapObj[i].reg
+                    , map: map
+                });
+                infowindow[i] = new google.maps.InfoWindow({
+                    content: mapObj[i].info
+                });
+                google.maps.event.addListener(markers[i], 'click', (function (marker, i) {
+                    return function () {
+                        infowindow[i].open(map, markers[i]);
+                    }
+                })(markers[i], i));
+            }
+        }
+
+        function check_last_id() {
+            $.get('index.php?action=last_map_id', function (data) {
+                var json = $.parseJSON(data);
+                if (json.id > last_id) {
+                    last_id = json.id;
+                    get_data();
+                }
+            });
+        }
+
+        function get_data() {
+            $.get('index.php?action=map_data', function (data) {
+                add_markers(data);
+            });
+        }
+        $(document).ready(function () {
+            setTimeout(check_last_id, 2000);
+        });
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=<?php echo $this->model->gmap_api; ?>&callback=initMap" async defer></script>
+</body>
+
+</html>

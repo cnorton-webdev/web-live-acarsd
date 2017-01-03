@@ -17,31 +17,65 @@ class Controller
         $this->model->last_id = $count;
     }
     
-    public function fetch_data() {
+    public function fetch_data($id) {
         $pdo = new \PDO("mysql:host=" . $this->model->db_host . ";" . "dbname=" . $this->model->db_name, $this->model->db_username, $this->model->db_password); 
-        $stmt = $pdo->prepare('SELECT * FROM acars ORDER BY id DESC LIMIT 5');
-        $stmt->execute();
+        if ($id == 0) {
+            $stmt = $pdo->prepare('SELECT * FROM acars ORDER BY id DESC LIMIT 5');
+            $stmt->execute();
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM acars WHERE id > ? ORDER BY id DESC');
+            $stmt->execute(array($id));
+        }
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         $rows = array_reverse ( $rows );
         $pdo = null;
         $data = '';
         $imgs = array();
-        foreach($rows as $row) {
-
+        foreach($rows as $row) {    
             $format = 'Y-m-d H:i:s';
             $date = \DateTime::createFromFormat($format, $row['date'] . ' ' . $row['time']);
+            
+            $place_holders = array(
+                '%reg%',
+                '%ac_type%',
+                '%mode%',
+                '%label%',
+                '%label_info%',
+                '%block_id%',
+                '%msg_num%',
+                '%message%',
+                '%flt_id%',
+                '%flt_path%',
+                '%airline%',
+                '%month%',
+                '%day%',
+                '%year%',
+                '%hour%',
+                '%minute%',
+                '%second%'
+            );
+            
+            $values = array(
+                $row['reg'],
+                $row['plane'], 
+                $row['mode'],
+                $row['label'],
+                $this->label_name($row['label']),
+                $row['blockid'],
+                $row['msgno'],
+                $row['message'],
+                $row['flight'],
+                '',
+                $row['airline'],
+                $date->format('m'),
+                $date->format('d'),
+                $date->format('Y'),
+                $date->format('H'),
+                $date->format('i'),
+                $date->format('s')
+            );
+            $data .= str_replace($place_holders, $values, $this->model->output_format);
 
-            $data .= '<span class="maroon">ACARS mode: </span><span class="blue">' . $row['mode'] . '</span>  <span class="maroon">Aircraft reg: </span><span class="blue">' . $row['reg'] . '</span>  <span class="green">[' . $row['plane'] . ']</span>' . "\n";
-
-            $data .= '<span class="maroon">Message label:</span> <span class="blue">' . $row['label'] . '</span> <span class="green">[' . $this->label_name($row['label']) . ']</span> <span class="maroon">Block id: <span><span class="blue">' . $row['blockid'] . '</span> <span class="maroon">Msg no: </span><span class="blue">' . $row['msgno'] . '</span>' . "\n";
-
-            $data .= '<span class="maroon">Flight ID:</span> <span class="blue">' . $row['flight'] . '</span> <span class="green">[' . $row['airline'] . ']</span>' . "\n";
-
-            $data .= '<span class="maroon">Message content:</span>' . "\n";
-
-            $data .= '<span class="blue">' . $row['message'] . '</span>' . "\n";
-
-            $data .= '<span class="black">----------------------------------------------------------[ ' .$date->format('m-d-Y H:i:s') . ' ]-</span>' . "\n";
             if ($row['flagged'] == 1) {
                 $data .= 'Flag above message as interesting: <input type="checkbox" name="flag_msg" value="' . $row['id'] . '" disabled="true" checked="true" />' . "\n\n";
             } else {
@@ -117,6 +151,7 @@ class Controller
                             '7B' => 'Aircraft initiated miscellaneous message',
                             'A1' => 'Deliver oceanic clearance',
                             'A2' => 'Deliver departure clearance',
+                            'A3' => 'Deliver departure clearance',
                             'A4' => 'Acknowledge PDC',
                             'A5' => 'Request position report',
                             'A6' => 'Request ADS report',
@@ -124,6 +159,7 @@ class Controller
                             'A8' => 'Deliver departure slot',
                             'A9' => 'Deliver ATIS information',
                             'A0' => 'ATIS Facilities notification',
+                            'B0' => 'ATIS facilities notification',
                             'B1' => 'Request oceanic clearance',
                             'B2' => 'Request oceanic readback',
                             'B3' => 'Request departure clearance',
@@ -180,5 +216,68 @@ class Controller
             }
         }
         return $type;
+    }
+    public function map_data() {
+        $pdo = new \PDO("mysql:host=" . $this->model->db_host . ";" . "dbname=" . $this->model->db_name, $this->model->db_username, $this->model->db_password); 
+        $stmt = $pdo->prepare("SELECT * FROM acars WHERE message LIKE '3N01%' OR message LIKE '#M1BPOS%' OR message LIKE '71,G%' OR message LIKE 'N %,W%' OR message LIKE '#DFBTRP%' OR message LIKE 'POSN%'  OR message LIKE '28,C%' OR message LIKE 'DFB(POS%' OR message LIKE 'POS02%' OR message LIKE '%,N %,W%' OR message LIKE '#DFB*POS%' ORDER BY id DESC LIMIT 5");
+        $stmt->execute();
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $rows = array_reverse ( $rows );
+        $data = [];
+        $i = 0;
+        foreach($rows as $row) {
+            $reg = $row['reg'];
+            $data[$i] = [];
+            $lat = '';
+            $lng = '';
+            
+            if (strpos($row['message'], '3N01 POSRPT') > -1 || strpos($row['message'], '#M1BPOS') > -1 || strpos($row['message'], 'POS02,') > -1 || strpos($row['message'], '#DFB*POS') > -1 || strpos($row['message'], 'POSN')) {
+                preg_match("/N([0-9.]{1,})W([0-9.]{4,5})/", $row['message'], $output);
+                $lat = substr($output[1],0,2) . '.' . substr($output[1],2);
+                if (substr($output[2],0,1) == 0) {
+                    $lng = '-' . substr($output[2],1,2) . '.' . substr($output[2],3);
+                } else {
+                    $lng = substr($output[2],1,2) . '.' . substr($output[2],3);
+                }
+            } elseif (substr($row['flight'],0,2) == 'WS') {
+                $msg_data = explode(',', $row['message']);
+                $lat = str_replace('N ', '', $msg_data[0]);
+                $lng = str_replace('W ', '-', $msg_data[1]);
+            } elseif (strpos($row['message'], '#DFBTRP') > -1) {
+                $msg_data = explode('  ', $row['message']);
+                $lat = $msg_data[1];
+                $lng = $msg_data[2];
+            } elseif (preg_match("/N\s([0-9.]{3,}),W\s([0-9.]{4,7})/", $row['message'])) {
+                preg_match("/N\s([0-9.]{3,}),W\s([0-9.]{4,7})/", $row['message'], $output);
+                $lat = substr($output[1],0,2) . '.' . substr($output[1],2);
+                if (substr($output[2],0,1) == ' ') {
+                    $lng = '-' . substr($output[2],1,2) . '.' . substr($output[2],3);
+                } else {
+                    $lng = substr($output[2],1,2) . '.' . substr($output[2],3);
+                }
+            }
+            
+            $data[$i]['lat'] = $lat;
+            $data[$i]['lng'] = $lng;
+            $data[$i]['reg'] = $reg;
+            $info_window = '<div class="info_content">
+                <h3 class="info_title"> Tail number: <a href="http://flightaware.com/live/flight/'. $reg . '" target="_blank">'. $reg . '</a></h3>
+                <div class="info_flight">Flight: ' . $row['flight'] . '</div>
+                <div class="info_date"> Date/Time: ' . $row['date'] . ' ' . $row['time'] . '</div>
+                <div class="info_message">Message Content: ' . $row['message'] . '</div>
+            </div>';
+            $data[$i]['info'] = $info_window;
+            $i++;
+        }
+        $this->model->map_markers = json_encode($data);
+    }
+    public function last_map_id() {
+        $pdo = new \PDO("mysql:host=" . $this->model->db_host . ";" . "dbname=" . $this->model->db_name, $this->model->db_username, $this->model->db_password); 
+        $stmt = $pdo->prepare("SELECT * FROM acars WHERE message LIKE '3N01%' OR message LIKE '#M1BPOS%' OR message LIKE '71,G%' OR message LIKE 'N %,W%' OR message LIKE '#DFBTRP%' OR message LIKE 'POSN%'  OR message LIKE '28,C%' OR message LIKE 'DFB(POS%' OR message LIKE 'POS02%' OR message LIKE '%,N %,W%' OR message LIKE '#DFB*POS%' ORDER BY id DESC LIMIT 1");
+        $stmt->execute();
+        $id = $stmt->fetchColumn();
+        $data = [];
+        $data['id'] = $id;
+        $this->model->last_map_id = json_encode($data);
     }
 }

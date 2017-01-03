@@ -171,7 +171,7 @@
 	};
 
     var autoUpdate, last_id;
-    
+    last_id = 0;
     $(document).ready(function() {
         autoUpdate = setInterval(checkUpdate, 5000);
         fetchData();
@@ -212,27 +212,41 @@
         openMap();
     });
     function openMap() {
-        window.open("map.php", "_blank", "toolbar=yes,scrollbars=yes,resizable=yes,width=600,height=600");
+        window.open("index.php?view=map", "_blank", "toolbar=yes,scrollbars=yes,resizable=yes,width=600,height=600");
     }
     function checkUpdate() {
         $.get('index.php?action=update_check', function( data ) {
             var j;
             j = $.parseJSON(data);
             if (j.last_id != last_id) {
-                fetchData();
+                fetchData(last_id);
             }
         });
     }
-    function fetchData() {
+    function fetchData(id) {
         var imgHTML = '';
-        $.get('index.php?action=fetch_data', function( data ) {
+        if (typeof id === 'undefined') {
+            id = 0;
+        }
+        $.get('index.php?action=fetch_data&id=' + id, function( data ) {
             var j;
             j = $.parseJSON(data);
-            for(var i=1;i < j.images.length;i++) {
-                imgHTML += "<img src='" + j.images[i].img + "' title='" + j.images[i].reg + "'>\n<br />\n<span>" + j.images[i].reg + "</span><br />\n"
+            for(var i=0;i < j.images.length;i++) {
+                imgHTML += "<span class='ac_img_container'><img src='" + j.images[i].img + "' title='" + j.images[i].reg + "'>\n<br />\n<span>" + j.images[i].reg + "</span><br /></span>\n"
             }
-            $('#airplane-photos').hide().html(imgHTML).fadeIn('slow');
-            $('#messages').hide().html(j.html).fadeIn('slow');
+            $('#airplane-photos').hide().append(imgHTML).fadeIn('slow');
+            
+            if ($('#airplane-photos > span').length > 4) {
+               var i, p;
+                p = $('#airplane-photos > span').length - 4;
+                for (i=1;i<=p;i++) {
+                    var el;
+                    el = $('#airplane-photos').find('span:first-child');
+                    el.remove();
+               }
+            }
+            $('#messages').hide().append(j.html).fadeIn('slow');
+            $('#messages').scrollTop($('#messages')[0].scrollHeight);
             last_id = j.last_id;
         }); 
     }
